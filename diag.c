@@ -1820,6 +1820,7 @@ void diag_source_comp(struct of_geom *ptrgeom, FTYPE (*dUcomp)[NPR],SFTYPE Dt)
 	  // now assign diagnostic form of source
 	  PDIAGLOOP(pl){
 	    localsourceaddterms[sc][pl]+=ftempdiag[pl];
+            //BOB: add an analog of lumvsr[startpos[1]+ptrgeom->i]+=... statement here, just as above for #if(DOLUMVSR)
 	  } // end PDIAGLOOP on diag
 	} // end SCLOOP
       }
