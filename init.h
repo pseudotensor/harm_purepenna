@@ -11,9 +11,9 @@
 #undef N3
 #endif
 
-#define N1 16
-#define N2 16
-#define N3 16
+#define N1 64
+#define N2 64
+#define N3 1
 
 // atch adjusts
 #undef MAXWELL
@@ -41,6 +41,9 @@
 #undef DOAVG
 #undef DOJETDIAG
 #undef DOAVG2
+#undef DOAVG2D
+#undef DODUMP2D
+#undef DODUMP2DDUFLOOR
 #undef DODEBUG
 #undef DO_WENO_DEBUG
 #undef DOENODEBUG
@@ -49,6 +52,8 @@
 #undef EVOLVEMETRICSUBSTEP
 #undef LIMITDTWITHSOURCETERM
 #undef DOLUMVSR
+#undef DOFIELDSVSR //BOBMARK
+#undef DOFAILFLOORVSR
 #undef DODISSVSR
 #undef DOSELFGRAVVSR
 #undef DOFIELDLINE
@@ -172,6 +177,9 @@
 #define DOAVG 0
 #define DOJETDIAG 1
 #define DOAVG2 0
+#define DOAVG2D 1
+#define DODUMP2DDUFLOOR 1
+#define DODUMP2D 1
 #define DODEBUG 1
 #define DO_WENO_DEBUG 0
 #define DOENODEBUG 0
@@ -182,6 +190,8 @@
 // these diagnostics do slow performance a bit when doing TIMEORDER<=2
 #define DODISS 1
 #define DOLUMVSR 1
+#define DOFIELDSVSR 1
+#define DOFAILFLOORVSR 1
 #define DODISSVSR 1
 
 #define DOSELFGRAVVSR 0

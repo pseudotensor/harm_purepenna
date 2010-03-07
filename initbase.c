@@ -1,4 +1,3 @@
-
 #include "decs.h"
 
 
@@ -716,7 +715,7 @@ int pre_init(int *argc, char **argv[])
   int ii;
   int dir,pl,sc,fl,floor,enerregion;
   int tscale;
-  int dissloop;
+  int chargeloop,failfloorloop,dissloop;
   int i,j,k;
   extern void set_arrays(void);
   int checki;
@@ -822,6 +821,14 @@ int pre_init(int *argc, char **argv[])
     for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++)  diss[dissloop] = 0;
 
     if(DOLUMVSR) if(enerregion==0) for(ii=0;ii<ncpux1*N1;ii++) lumvsr[ii]=0;
+
+    //BOBMARK
+    if(DOFIELDSVSR) if(enerregion==0) for(ii=0;ii<ncpux1*N1;ii++) for(chargeloop=0;chargeloop<NUMCHARGES;chargeloop++) chargesvsr[chargeloop][ii]=0;
+
+    //BOBMARK
+    if(DOFAILFLOORVSR) if(enerregion==0) for(ii=0;ii<ncpux1*N1;ii++) for(failfloorloop=0;failfloorloop<NUMFAILFLOORS;failfloorloop++) failfloorduvsr[failfloorloop][ii]=0;
+
+
     if(DODISSVSR) if(enerregion==0) for(ii=0;ii<ncpux1*N1;ii++) for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++) dissvsr[dissloop][ii]=0;
     if(DOSELFGRAVVSR) if(enerregion==0) for(ii=0;ii<ncpux1*N1;ii++) dMvsr[ii]=0;
 
@@ -1032,6 +1039,12 @@ int init_defglobal(void)
     DOAVGDIAG=1; // choice
   }
   else DOAVGDIAG=0; // no choice
+  if(DOAVG2D) {
+    DOAVG2DDIAG=1;
+  }
+  else{
+    DOAVG2DDIAG=0;
+  }
   DOIMAGEDIAG=1;
   DOAREAMAPDIAG=1;
 
@@ -1705,8 +1718,8 @@ void check_bnd_num(void)
     dualfprintf(fail_file,"WARNING: LIMITDTWITHSOURCETERM set to 1, code may be slower\n");
   }
 
-  if(DODISS || DOLUMVSR || DODISSVSR || DOENTROPY!=DONOENTROPY){
-    dualfprintf(fail_file,"WARNING: DODISS/DOLUMVSR/DODISSVSR/DOENTROPY!=DONOENTROPY set to 1, code may be slower\n");
+  if(DODISS || DOLUMVSR || DOFIELDSVSR || DODISSVSR || DOENTROPY!=DONOENTROPY){
+    dualfprintf(fail_file,"WARNING: DODISS/DOLUMVSR/DOFIELDSVSR/DODISSVSR/DOENTROPY!=DONOENTROPY set to 1, code may be slower\n");
   }
 
   if(CHECKONINVERSION){

@@ -76,7 +76,7 @@ int diag(int call_code, FTYPE localt, long localnstep, long localrealnstep)
 
 
       nrestart = localnstep;
-      // override defaults:
+      // override defaults: since need to wait for one dump period to collect average
       tdumpgen[DTAVG]=localt+DTdumpgen[DTAVG]; // do next time
 
       //      tdump = timage = tener = t;
@@ -446,8 +446,7 @@ int diag(int call_code, FTYPE localt, long localnstep, long localrealnstep)
     if(average_calc(dodumpgen[DTAVG])>=1) return(1);
   }
 
-  
-  if(dodumpgen[DTAVG]){
+  if(DOAVGDIAG && dodumpgen[DTAVG]){
     DIAGREPORT
     trifprintf("avging dump: avg_cnt=%ld : t=%21.15g tlastavg=%21.15g tavg=%21.15g avgc=%d\n", dumpcntgen[DTAVG],localt,tlastgen[DTAVG],tdumpgen[DTAVG],dumpcgen[DTAVG]);
     
@@ -456,14 +455,7 @@ int diag(int call_code, FTYPE localt, long localnstep, long localrealnstep)
       dualfprintf(fail_file,"unable to print avg file\n");
       return (1);
     }
-#if(DOAVG2)
-    /* make avg dump file */
-    if (avgdump2(dumpcntgen[DTAVG]) >= 1){
-      dualfprintf(fail_file,"unable to print avg2 file\n");
-      return (1);
-    }
-#endif
-
+    
     // iterate counter
     dumpcntgen[DTAVG]++;
 
@@ -478,6 +470,47 @@ int diag(int call_code, FTYPE localt, long localnstep, long localrealnstep)
     tlastgen[DTAVG]=localt;
   }
 
+  if(DOAVG2DDIAG){
+    // do every time step
+    // assume can't fail, but can apparently
+    if(average2d_calc(dodumpgen[DTAVG])>=1) return(1);
+  }
+  
+  if(DOAVG2DDIAG && dodumpgen[DTAVG]){
+    DIAGREPORT
+    trifprintf("avging 2d dump: avg2d_cnt=%ld : t=%21.15g tlastavg=%21.15g tavg=%21.15g avgc=%d\n", dumpcntgen[DTAVG],localt,tlastgen[DTAVG],tdumpgen[DTAVG],dumpcgen[DTAVG]);
+    
+    /* make avg2d dump file */
+    if (avg2ddump(dumpcntgen[DTAVG], "dumps/avg2d", vars2dtavg, NUM2DAVGDUMP) >= 1){
+      dualfprintf(fail_file,"unable to print avg2 file\n");
+      return (1);
+    }
+    
+    /* make instantaneous 2d dump file on the same time scale as avg dump */
+    if (avg2ddump(dumpcntgen[DTAVG], "dumps/dmp2d", vars2ddump, NUM2DDUMP) >= 1){
+      dualfprintf(fail_file,"unable to print dmp2 file\n");
+      return (1);
+    }
+    
+    /* make cumulative 2d floor file on the same time scale as avg dump */
+    if (avg2ddump(dumpcntgen[DTAVG], "dumps/dufloors2d", vars2ddufloor, NUM2DDUFLOOR) >= 1){
+      dualfprintf(fail_file,"unable to print dufloors2d file\n");
+      return (1);
+    }
+    
+    // iterate counter
+    dumpcntgen[DTAVG]++;
+
+    whichDT=DTAVG;
+    // below is really floor to nearest integer plus 1
+    dumpcgen[whichDT] = 1 + MAX(0,(long long int)((localt-tdumpgen[whichDT])/DTdumpgen[whichDT]));
+    tdumpgen[whichDT] = (ROUND2LONGLONGINT(tdumpgen[whichDT]/DTdumpgen[whichDT]) + dumpcgen[whichDT])*DTdumpgen[whichDT];
+    // output number of avgs
+    myfopen("dumps/0_num2davgs.dat","w","error opening avg count file\n",&dumpcnt_filegen[DTAVG]);      
+    myfprintf(dumpcnt_filegen[DTAVG], "# Number of avgs\n%ld\n", dumpcntgen[DTAVG]);
+    myfclose(&dumpcnt_filegen[DTAVG],"Couldn't close avgcnt_file");
+    tlastgen[DTAVG]=localt;
+  }
 
   //////////////////////
   //
@@ -633,7 +666,7 @@ int get_dodumps(int call_code, int firsttime, SFTYPE localt, long localnstep, lo
   else dodumpgen[DTDEBUG]=0;
 
   
-  if((DOAVGDIAG)&&((localt!=tlastgen[DTAVG])&&(localt >= tdumpgen[DTAVG] || call_code==FINAL_OUT))){
+  if((DOAVG2DDIAG||DOAVGDIAG)&&((localt!=tlastgen[DTAVG])&&(localt >= tdumpgen[DTAVG] || call_code==FINAL_OUT))){
     dodumpgen[DTAVG]=1;
   }
   else dodumpgen[DTAVG]=0;
@@ -1744,6 +1777,332 @@ int average_calc(int doavg)
 }
 
 
+/////////////////////////////////////
+//
+// START OF 2D AVERAGE/DUMPS SECTION
+//
+/////////////////////////////////////
+
+
+// 0. Should be called every time step
+// 1. Keeps updating the integrals at each call: intqdt = q(t) * <dt>
+// 2. Resets the integrals either at the initial call or just after the another dump done and:
+//      (a) saves tavgi = t and 
+//      (b) zeroes out memory space for starting the new average
+// 4. When call just before dump (use doavg==1 as an argument), the routine:
+//      (a) saves tavgf = t 
+//      (b) divides each of the accumulated quantities intqdt by the time period, (tavgf-tavgi)
+int average2d_calc(int doavg)
+{
+  static FTYPE lastdt;
+  static int firstcall=1;
+  static FTYPE tavgi,tavgf;
+  static int tavgflag=1;
+ 
+  if(!firstcall){ // since need 2 times
+
+    if(tavgflag){
+      // gets reached on next call after dump call or first time
+      init_vars2dtavg();
+      tavgflag=0;
+      tavgi=t;
+      global_tavgi_2d=tavgi;
+    }
+
+    // always do
+    if(set_vars2dtavg(0.5*(lastdt+dt),doavg)>=1) return(1);
+
+    if(doavg==1){
+      tavgflag=1;
+      tavgf=t;
+      global_tavgf_2d=tavgf;
+      if( tavgf == tavgi ) {
+        dualfprintf( fail_file, "average2d_calc(): tavgf should not equal tavgi\n" );
+        myexit(113);
+      }
+      final_vars2dtavg(1.0/(tavgf-tavgi));
+      // expect to dump after this function ends and before next call to this function
+    }
+  }
+  firstcall=0;
+  lastdt=dt;
+
+  return(0);
+}
+
+//resets all counters to zero
+void init_vars2dtavg(void)
+{
+  int i,j,k,indvar;
+
+  ZLOOP{
+    if( k!=0 ) continue;  //only 2D-loop
+    
+    // LUMVSR and other things
+    for(indvar=0;indvar<NUM2DAVGDUMP;indvar++){
+      vars2dtavg[indvar][i][j][0]=0;
+    }
+    for(indvar=0;indvar<NUM2DDUMP;indvar++){
+      vars2ddump[indvar][i][j][0]=0;
+    }
+     
+    for(indvar=0;indvar<NUM2DDUFLOOR;indvar++){
+      vars2ddufloor[indvar][i][j][0]=0;
+    }      
+  }
+  
+}
+
+//divides accumulated quantities by time interval IDT
+void final_vars2dtavg(FTYPE IDT)
+{
+  int i,j,k,indvar;
+
+  ZLOOP{
+    if( k!=0 ) continue;  //only 2D-loop
+    
+    // LUMVSR and other things
+    for(indvar=0;indvar<NUM2DAVGDUMP;indvar++){
+      vars2dtavg[indvar][i][j][0]=vars2dtavg[indvar][i][j][0]*IDT;
+    }      
+   }
+}
+
+
+int set_vars2dtavg(FTYPE tfracreal, int is_final_call_before_dump)
+{
+  int i,j,k;
+  int m;
+  int ll;
+  int l,ii,aii;
+  FTYPE ftemp;
+  FTYPE ftemp0,ftemp1,ftemp2,ftemp3,ftemp4,ftemp5,ftemp6;
+  FTYPE pgas,bsq;
+  FTYPE jcov[NDIM];
+  FTYPE fcov[NUMFARADAY];
+  FTYPE V[NDIM], vmin[NDIM], vmax[NDIM];
+  int ignorecourant;
+  struct of_geom geom;
+  struct of_state q;
+  FTYPE X[NDIM];
+  FTYPE divb;
+  FTYPE b[NDIM],ucon[NDIM];
+  FTYPE U[NPR];
+  FTYPE (*vars)[N1M][N2M][1];  
+  int whichvar;
+  FTYPE tfrac;
+
+  for( whichvar = 0; whichvar < 2; whichvar++ ) {
+    /////////////////////////////////////
+    // Choose vars to point to either vars2dtavg or vars2ddump
+    // Adjust tfrac accordingly
+    /////////////////////////////////////
+    if( whichvar == 0 ){ //average
+      vars = vars2dtavg;
+      tfrac = tfracreal;  //weight proportional to local (average) time step
+    }
+    else if( whichvar == 1) {  //instantaneous snapshot
+      if( 0 == is_final_call_before_dump ) {
+        //don't make assignment if not just before dump
+        break;
+      }
+      vars = vars2ddump;
+      tfrac = 1.; //equal weight (no time weighing since instantaneous dump)
+      //zero out LUMVSR in instantaneous dumps since cannot be well-defined
+      vars[VARS2DLUMVSR][i][j][0] = 0;  //used wrong order of arguments but should not have caused problems
+    }
+    
+    ZLOOP{
+      // just like dumps
+      coord(i, j, k, CENT, X);
+      bl_coord(X, V);
+      // if failed, then data output for below invalid, but columns still must exist    
+      get_geometry(i, j, k, CENT, &geom);
+      if (!failed) {
+        if (get_state(pdump[i][j][k], &geom, &q) >= 1)
+          FAILSTATEMENT("diag.c:set_varstavg()", "get_state() dir=0", 1);
+  
+        if (vchar(pdump[i][j][k], &q, 1, &geom, &vmax[1], &vmin[1],&ignorecourant) >= 1)
+          FAILSTATEMENT("diag.c:set_varstavg()", "vchar() dir=1or2or3", 1);
+        if (vchar(pdump[i][j][k], &q, 2, &geom, &vmax[2], &vmin[2],&ignorecourant) >= 1)
+          FAILSTATEMENT("diag.c:set_varstavg()", "vchar() dir=1or2or3", 2);
+        if (vchar(pdump[i][j][k], &q, 3, &geom, &vmax[3], &vmin[3],&ignorecourant) >= 1)
+          FAILSTATEMENT("diag.c:set_varstavg()", "vchar() dir=1or2or3", 3);
+      }
+      else {// do a per zone check, otherwise set to 0
+        whocalleducon=1; // force no failure mode, just return like failure, and don't return if failure, just set to 0 and continue
+        if (get_state(pdump[i][j][k], &geom, &q) >= 1){
+          for (m = 0; m < NDIM; m++)
+            q.ucon[m]=0;
+          for (m = 0; m < NDIM; m++)
+            q.ucov[m]=0;
+          for (m = 0; m < NDIM; m++)
+            q.bcon[m]=0;
+          for (m = 0; m < NDIM; m++)
+            q.bcov[m]=0;
+        }
+        if (vchar(pdump[i][j][k], &q, 1, &geom, &vmax[1], &vmin[1],&ignorecourant) >= 1){
+          vmax[1]=vmin[1]=0;
+        }
+          
+        if (vchar(pdump[i][j][k], &q, 2, &geom, &vmax[2], &vmin[2],&ignorecourant) >= 1){
+          vmax[2]=vmin[2]=0;
+        }
+  
+        if (vchar(pdump[i][j][k], &q, 2, &geom, &vmax[3], &vmin[3],&ignorecourant) >= 1){
+          vmax[3]=vmin[3]=0;
+        }
+  
+        whocalleducon=0; // return to normal state
+  
+      }
+  
+      setfdivb(&divb, pdump, udump, i, j, k); // pdump,udump set externally GODMARK
+
+      /// Initialize indexes with one after LUMVSR (which is 0th)
+      ii=VARS2DLUMVSR+1;
+  
+      //time averages of primitive quantities
+      for(m=0;m<NPR;m++){ // always NPR here
+        vars[ii++][i][j][0]+=pdump[i][j][k][m]*tfrac;
+      }
+      
+      //absolute value of divb
+      vars[ii++][i][j][0]+=fabs(divb)*tfrac;
+  
+      //u^m
+      for (m = 0; m < NDIM; m++) {
+        vars[ii++][i][j][0]+=q.ucon[m]*tfrac;
+      }
+  
+      //u_m
+      for (m = 0; m < NDIM; m++) {
+        vars[ii++][i][j][0]+=q.ucov[m]*tfrac;
+      }
+  
+      //b^m
+      for (m = 0; m < NDIM; m++) {
+        vars[ii++][i][j][0]+=q.bcon[m]*tfrac;
+      }
+  
+      //b_m
+      for (m = 0; m < NDIM; m++) {
+        vars[ii++][i][j][0]+=q.bcov[m]*tfrac;
+      }
+      
+      //characteristics
+      vars[ii++][i][j][0]+=vmin[1]*tfrac;
+      vars[ii++][i][j][0]+=vmax[1]*tfrac;
+      vars[ii++][i][j][0]+=vmin[2]*tfrac;
+      vars[ii++][i][j][0]+=vmax[2]*tfrac;
+      vars[ii++][i][j][0]+=vmin[3]*tfrac;
+      vars[ii++][i][j][0]+=vmax[3]*tfrac;
+  
+      //rho u^m
+      for(m=0;m<NDIM;m++){
+        ftemp=pdump[i][j][k][RHO];
+        ftemp*=(q.ucon[m]);
+        vars[ii][i][j][0]+=ftemp*tfrac;
+        ii++;
+      }
+  
+      //rho b^m
+      for(m=0;m<NDIM;m++){
+        ftemp=pdump[i][j][k][RHO]*(q.bcon[m]);
+        vars[ii][i][j][0]+=ftemp*tfrac;
+        ii++;
+      }
+    
+      //compute 3-velocity
+      //ftemp=(q.ucon[3])/(q.ucon[0]);
+      //othertavg[i][j][k][ii++]=ftemp*tfrac;
+      //aothertavg[i][j][k][aii++]=fabs(ftemp)*tfrac;
+  
+      pgas = pressure_rho0_u(pdump[i][j][k][RHO],pdump[i][j][k][UU]);
+      bsq=0; for(m=0;m<NDIM;m++) bsq+=(q.bcon[m])*(q.bcov[m]);
+      
+      //pgas u^iiu
+      for(m=0;m<NDIM;m++){
+        ftemp=pgas*(q.ucon[m]);
+        vars[ii][i][j][0]+=ftemp*tfrac;
+        ii++;
+      }
+      
+      //p_g
+      vars[ii][i][j][0]+=pgas*tfrac;
+  
+      ii++;
+      
+      //b^2
+      vars[ii][i][j][0]+=bsq*tfrac;
+      
+      ii++;
+  
+      // part0: p_g u^m u_l
+      for(m=0;m<NDIM;m++) for(l=0;l<=m;l++){
+        ftemp0=pgas*(q.ucov[m])*(q.ucov[l]);
+        vars[ii][i][j][0]+=ftemp0*tfrac;
+        ii++;
+      }
+      // part1: rho u^m u_l
+      for(m=0;m<NDIM;m++) for(l=0;l<=m;l++){
+        ftemp1=pdump[i][j][k][RHO]*(q.ucov[m])*(q.ucov[l]);
+        vars[ii][i][j][0]+=ftemp1*tfrac;
+        ii++;
+      }
+      // part2: u u^m u_l
+      for(m=0;m<NDIM;m++) for(l=0;l<=m;l++){
+        ftemp2=pdump[i][j][k][UU]*(q.ucov[m])*(q.ucov[l]);
+        vars[ii][i][j][0]+=ftemp2*tfrac;
+        ii++;
+      }
+      // part3: b^2 u^m u_l
+      for(m=0;m<NDIM;m++) for(l=0;l<=m;l++){
+        ftemp3=bsq*(q.ucov[m])*(q.ucov[l]);
+        vars[ii][i][j][0]+=ftemp3*tfrac;
+        ii++;
+      }
+      
+      /*  commented out these memory-eating things -- just scalars p_g and bsq above enough
+      // part4: p_g \delta^m_l
+      for(m=0;m<NDIM;m++) for(l=0;l<NDIM;l++){
+        ftemp4=pgas*delta(m,l);
+        vars[ii][i][j][0]+=ftemp4*tfrac;
+        ii++;
+      }
+      // part5: 0.5*bsq \delta^m_l
+      for(m=0;m<NDIM;m++) for(l=0;l<NDIM;l++){
+        ftemp5=0.5*bsq*delta(m,l);
+        vars[ii][i][j][0]+=ftemp5*tfrac;
+        ii++;
+      }
+      */
+      
+      // part6: b^m b_l
+      for(m=0;m<NDIM;m++) for(l=0;l<=m;l++){
+        ftemp6=(q.bcov[m])*(q.bcov[l]);
+        vars[ii][i][j][0]+=ftemp6*tfrac;
+        ii++;
+      }
+      
+      // u^m u_l
+      for(m=0;m<NDIM;m++) for(l=0;l<=m;l++){
+        ftemp6=(q.ucov[m])*(q.ucov[l]);
+        vars[ii][i][j][0]+=ftemp6*tfrac;
+        ii++;
+      }
+    } //ZLOOP
+  } //end for whichvar
+  return(0);
+
+}
+
+/////////////////////////////////////
+//
+//  END OF 2D AVERAGE/DUMPS SECTION
+//
+/////////////////////////////////////
+
 void diag_source_all(struct of_geom *ptrgeom, FTYPE *dU,SFTYPE Dt)
 {
   int pl,enerregion;
@@ -1783,6 +2142,15 @@ void diag_source_all(struct of_geom *ptrgeom, FTYPE *dU,SFTYPE Dt)
 		//	      }
 	    }
 #endif
+#if(DOAVG2D)
+	  // GODMARK: only correct for diagonal coordinate Jacobian in which each i is same radius for all j
+            if(pl==UU) if(enerregion==0){
+              vars2dtavg[VARS2DLUMVSR][ptrgeom->i][ptrgeom->j][0]+=ftempdiag[pl];
+	      //	      if(!isfinite(ftempdiag[pl])){
+	      //		dualfprintf(fail_file,"ii=%d ftempdiag=%21.15g\n",startpos[1]+ptrgeom->i,ftempdiag[pl]);
+		//	      }
+            }
+#endif
 	} // end PDIAGLOOP on diag
       }
     }
@@ -1790,6 +2158,204 @@ void diag_source_all(struct of_geom *ptrgeom, FTYPE *dU,SFTYPE Dt)
 
 }
 
+
+//BOBMARK... This is a modified copy of diag_source_all() (see above)
+void diag_chargesvsr(FTYPE *pr, struct of_geom *ptrgeom, struct of_state *q, SFTYPE Dt)
+{
+  int enerregion;
+  FTYPE myftemp[NUMCHARGES];
+  FTYPE bsq;
+  int *localenerpos;
+  int chargeloop;
+
+ 
+  // does not matter what stage
+  if(Dt>0.0){
+    
+
+    ENERREGIONLOOP(enerregion){
+      localenerpos=enerposreg[enerregion];
+
+      if(WITHINENERREGION(localenerpos,ptrgeom->i,ptrgeom->j,ptrgeom->k)){
+
+	bsq = dot(q->bcon, q->bcov);
+
+	myftemp[0]=Dt*dVF*(ptrgeom->g)*pr[RHO];
+	myftemp[1]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[RHO];
+	myftemp[2]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[UU];
+	myftemp[3]=Dt*dVF*(ptrgeom->g)*pr[RHO]*bsq;
+
+	myftemp[4]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[2];
+	myftemp[5]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[3];
+	myftemp[6]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[4];
+
+	myftemp[7]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[5];
+	myftemp[8]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[6];
+	myftemp[9]=Dt*dVF*(ptrgeom->g)*pr[RHO]*pr[7];
+
+	//rho * u * u
+
+	myftemp[10]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[TT])*(q->ucov[TT]);
+	myftemp[11]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[TT])*(q->ucov[RR]);
+	myftemp[12]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[TT])*(q->ucov[TH]);
+	myftemp[13]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[TT])*(q->ucov[PH]);
+	myftemp[14]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[RR])*(q->ucov[RR]);
+	myftemp[15]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[RR])*(q->ucov[TH]);
+	myftemp[16]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[RR])*(q->ucov[PH]);
+	myftemp[17]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[TH])*(q->ucov[TH]);
+	myftemp[18]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[TH])*(q->ucov[PH]);
+	myftemp[19]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucov[PH])*(q->ucov[PH]);
+
+	myftemp[20]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucov[TT]);
+	myftemp[21]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucov[RR]);
+	myftemp[22]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucov[TH]);
+	myftemp[23]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucov[PH]);
+	myftemp[24]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR])*(q->ucov[RR]);
+	myftemp[25]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR])*(q->ucov[TH]);
+	myftemp[26]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR])*(q->ucov[PH]);
+	myftemp[27]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TH])*(q->ucov[TH]);
+	myftemp[28]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TH])*(q->ucov[PH]);
+	myftemp[29]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[PH])*(q->ucov[PH]);
+
+	myftemp[30]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucon[TT]);
+	myftemp[31]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucon[RR]);
+	myftemp[32]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucon[TH]);
+	myftemp[33]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT])*(q->ucon[PH]);
+	myftemp[34]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR])*(q->ucon[RR]);
+	myftemp[35]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR])*(q->ucon[TH]);
+	myftemp[36]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR])*(q->ucon[PH]);
+	myftemp[37]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TH])*(q->ucon[TH]);
+	myftemp[38]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TH])*(q->ucon[PH]);
+	myftemp[39]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[PH])*(q->ucon[PH]);
+
+
+	//UU * u * u
+
+	myftemp[40]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[TT])*(q->ucov[TT]);
+	myftemp[41]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[TT])*(q->ucov[RR]);
+	myftemp[42]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[TT])*(q->ucov[TH]);
+	myftemp[43]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[TT])*(q->ucov[PH]);
+	myftemp[44]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[RR])*(q->ucov[RR]);
+	myftemp[45]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[RR])*(q->ucov[TH]);
+	myftemp[46]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[RR])*(q->ucov[PH]);
+	myftemp[47]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[TH])*(q->ucov[TH]);
+	myftemp[48]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[TH])*(q->ucov[PH]);
+	myftemp[49]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucov[PH])*(q->ucov[PH]);
+
+	myftemp[50]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucov[TT]);
+	myftemp[51]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucov[RR]);
+	myftemp[52]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucov[TH]);
+	myftemp[53]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucov[PH]);
+	myftemp[54]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[RR])*(q->ucov[RR]);
+	myftemp[55]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[RR])*(q->ucov[TH]);
+	myftemp[56]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[RR])*(q->ucov[PH]);
+	myftemp[57]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TH])*(q->ucov[TH]);
+	myftemp[58]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TH])*(q->ucov[PH]);
+	myftemp[59]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[PH])*(q->ucov[PH]);
+
+	myftemp[60]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucon[TT]);
+	myftemp[61]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucon[RR]);
+	myftemp[62]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucon[TH]);
+	myftemp[63]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TT])*(q->ucon[PH]);
+	myftemp[64]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[RR])*(q->ucon[RR]);
+	myftemp[65]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[RR])*(q->ucon[TH]);
+	myftemp[66]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[RR])*(q->ucon[PH]);
+	myftemp[67]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TH])*(q->ucon[TH]);
+	myftemp[68]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[TH])*(q->ucon[PH]);
+	myftemp[69]=Dt*dVA*(ptrgeom->g)*pr[UU]*(q->ucon[PH])*(q->ucon[PH]);
+
+	//bsq * u * u
+
+	myftemp[70]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[TT])*(q->ucov[TT]);
+	myftemp[71]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[TT])*(q->ucov[RR]);
+	myftemp[72]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[TT])*(q->ucov[TH]);
+	myftemp[73]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[TT])*(q->ucov[PH]);
+	myftemp[74]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[RR])*(q->ucov[RR]);
+	myftemp[75]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[RR])*(q->ucov[TH]);
+	myftemp[76]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[RR])*(q->ucov[PH]);
+	myftemp[77]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[TH])*(q->ucov[TH]);
+	myftemp[78]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[TH])*(q->ucov[PH]);
+	myftemp[79]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucov[PH])*(q->ucov[PH]);
+
+	myftemp[80]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucov[TT]);
+	myftemp[81]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucov[RR]);
+	myftemp[82]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucov[TH]);
+	myftemp[83]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucov[PH]);
+	myftemp[84]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[RR])*(q->ucov[RR]);
+	myftemp[85]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[RR])*(q->ucov[TH]);
+	myftemp[86]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[RR])*(q->ucov[PH]);
+	myftemp[87]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TH])*(q->ucov[TH]);
+	myftemp[88]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TH])*(q->ucov[PH]);
+	myftemp[89]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[PH])*(q->ucov[PH]);
+
+	myftemp[90]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucon[TT]);
+	myftemp[91]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucon[RR]);
+	myftemp[92]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucon[TH]);
+	myftemp[93]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TT])*(q->ucon[PH]);
+	myftemp[94]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[RR])*(q->ucon[RR]);
+	myftemp[95]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[RR])*(q->ucon[TH]);
+	myftemp[96]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[RR])*(q->ucon[PH]);
+	myftemp[97]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TH])*(q->ucon[TH]);
+	myftemp[98]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[TH])*(q->ucon[PH]);
+	myftemp[99]=Dt*dVA*(ptrgeom->g)*bsq*(q->ucon[PH])*(q->ucon[PH]);
+
+	// b * b
+
+	myftemp[100]=Dt*dVA*(ptrgeom->g)*(q->bcov[TT])*(q->bcov[TT]);
+	myftemp[101]=Dt*dVA*(ptrgeom->g)*(q->bcov[TT])*(q->bcov[RR]);
+	myftemp[102]=Dt*dVA*(ptrgeom->g)*(q->bcov[TT])*(q->bcov[TH]);
+	myftemp[103]=Dt*dVA*(ptrgeom->g)*(q->bcov[TT])*(q->bcov[PH]);
+	myftemp[104]=Dt*dVA*(ptrgeom->g)*(q->bcov[RR])*(q->bcov[RR]);
+	myftemp[105]=Dt*dVA*(ptrgeom->g)*(q->bcov[RR])*(q->bcov[TH]);
+	myftemp[106]=Dt*dVA*(ptrgeom->g)*(q->bcov[RR])*(q->bcov[PH]);
+	myftemp[107]=Dt*dVA*(ptrgeom->g)*(q->bcov[TH])*(q->bcov[TH]);
+	myftemp[108]=Dt*dVA*(ptrgeom->g)*(q->bcov[TH])*(q->bcov[PH]);
+	myftemp[109]=Dt*dVA*(ptrgeom->g)*(q->bcov[PH])*(q->bcov[PH]);
+
+	myftemp[110]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcov[TT]);
+	myftemp[111]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcov[RR]);
+	myftemp[112]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcov[TH]);
+	myftemp[113]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcov[PH]);
+	myftemp[114]=Dt*dVA*(ptrgeom->g)*(q->bcon[RR])*(q->bcov[RR]);
+	myftemp[115]=Dt*dVA*(ptrgeom->g)*(q->bcon[RR])*(q->bcov[TH]);
+	myftemp[116]=Dt*dVA*(ptrgeom->g)*(q->bcon[RR])*(q->bcov[PH]);
+	myftemp[117]=Dt*dVA*(ptrgeom->g)*(q->bcon[TH])*(q->bcov[TH]);
+	myftemp[118]=Dt*dVA*(ptrgeom->g)*(q->bcon[TH])*(q->bcov[PH]);
+	myftemp[119]=Dt*dVA*(ptrgeom->g)*(q->bcon[PH])*(q->bcov[PH]);
+
+	myftemp[120]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcon[TT]);
+	myftemp[121]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcon[RR]);
+	myftemp[122]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcon[TH]);
+	myftemp[123]=Dt*dVA*(ptrgeom->g)*(q->bcon[TT])*(q->bcon[PH]);
+	myftemp[124]=Dt*dVA*(ptrgeom->g)*(q->bcon[RR])*(q->bcon[RR]);
+	myftemp[125]=Dt*dVA*(ptrgeom->g)*(q->bcon[RR])*(q->bcon[TH]);
+	myftemp[126]=Dt*dVA*(ptrgeom->g)*(q->bcon[RR])*(q->bcon[PH]);
+	myftemp[127]=Dt*dVA*(ptrgeom->g)*(q->bcon[TH])*(q->bcon[TH]);
+	myftemp[128]=Dt*dVA*(ptrgeom->g)*(q->bcon[TH])*(q->bcon[PH]);
+	myftemp[129]=Dt*dVA*(ptrgeom->g)*(q->bcon[PH])*(q->bcon[PH]);
+
+
+	//mass flux
+	myftemp[130]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TT]);
+	myftemp[131]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[RR]);
+	myftemp[132]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[TH]);
+	myftemp[133]=Dt*dVA*(ptrgeom->g)*pr[RHO]*(q->ucon[PH]);
+
+
+
+	
+#if(DOFIELDSVSR)
+	if(enerregion==0){   //BOBMARK: we're only really interested in enerregion==0 ('GLOBALENERREGION')
+	  for(chargeloop=0;chargeloop<NUMCHARGES;chargeloop++){
+	    chargesvsr[chargeloop][startpos[1]+ptrgeom->i] += myftemp[chargeloop] ;
+	  }
+	}
+#endif
+      }
+    } //end ENERREGIONLOOP
+  } 
+}
+  
 
 
 void diag_source_comp(struct of_geom *ptrgeom, FTYPE (*dUcomp)[NPR],SFTYPE Dt)
@@ -1820,7 +2386,6 @@ void diag_source_comp(struct of_geom *ptrgeom, FTYPE (*dUcomp)[NPR],SFTYPE Dt)
 	  // now assign diagnostic form of source
 	  PDIAGLOOP(pl){
 	    localsourceaddterms[sc][pl]+=ftempdiag[pl];
-            //BOB: add an analog of lumvsr[startpos[1]+ptrgeom->i]+=... statement here, just as above for #if(DOLUMVSR)
 	  } // end PDIAGLOOP on diag
 	} // end SCLOOP
       }

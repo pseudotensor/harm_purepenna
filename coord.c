@@ -1568,7 +1568,7 @@ void set_points()
   
   dV = dx[1] * dx[2] * dx[3]; // computational volume 
   dVF = dV ; // full 3d volume
-
+  dVA = dx[2] * dx[3]; //BOBMARK... needed for printing fluxes to 'fieldsvsr.out'
 
 }
 

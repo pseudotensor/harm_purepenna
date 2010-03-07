@@ -773,6 +773,14 @@
 #define RADSOURCE2 2
 
 
+#define NUMCHARGES 134
+#define CHARGERHO 0
+#define CHARGERHOSQ 1
+#define CHARGEUU 2
+#define CHARGEBSQ 3
+
+//number of failfloor quantites to print: we're only interested in the first 5 (rho, uu, v1, v2, and v3 added by fixups and fails)
+#define NUMFAILFLOORS 5
 
 
 

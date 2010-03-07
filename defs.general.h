@@ -160,6 +160,10 @@ FTYPE (*afcovtavg)[N2M][N3M][NUMFARADAY];
 FTYPE (*tudtavg)[N2M][N3M][NUMSTRESSTERMS];
 FTYPE (*atudtavg)[N2M][N3M][NUMSTRESSTERMS];
 
+FTYPE (*vars2dtavg)[N1M][N2M][1];
+FTYPE (*vars2ddump)[N1M][N2M][1];
+FTYPE (*vars2ddufloor)[N1M][N2M][1];
+
 // for image, see image.c
 FTYPE (*pimage)[N2M][N3M][NPR];
 
@@ -202,6 +206,9 @@ FTYPE (*uenotmp2)[N2M][N3M][NPR]; /* for ENO reconstruction of U or dU*/
 FTYPE Xmetricnew[NDIM],Xmetricold[NDIM]; // used to store time of latest and oldest metric
 
 SFTYPE *lumvsr,*lumvsr_tot;
+SFTYPE *chargesvsr[NUMCHARGES],*chargesvsr_tot[NUMCHARGES];
+SFTYPE *failfloorduvsr[NUMFAILFLOORS],*failfloorduvsr_tot[NUMFAILFLOORS];
+
 
 SFTYPE *dissvsr[NUMDISSVERSIONS],*dissvsr_tot[NUMDISSVERSIONS];
 
@@ -221,11 +228,13 @@ FTYPE Rin, R0, Rout, hslope, Zin, Zout;
 FTYPE Rin_array[NDIM], Rout_array[NDIM];  //atch -- arrays for a more general way of handling the grid dimensions
 FTYPE Risco,Rhor;
 FTYPE cour;
-FTYPE dV, dVF, dx[NDIM], startx[NDIM];
+FTYPE dV, dVF, dVA, dx[NDIM], startx[NDIM];  //BOBMARK... added dVA for computing fluxes that get printed to fieldsvsr.out
 SFTYPE dt,t,tf,tstepparti,tsteppartf;
 FTYPE TDYNORYEglobal,Hglobal;
 FTYPE rcurr, hcurr;
 FTYPE drsing;
+
+FTYPE global_tavgi_2d, global_tavgf_2d;
 
 //int istart, istop, jstart, jstop;
 #if(SIMULBCCALC!=-1) 
@@ -399,7 +408,7 @@ FTYPE h_over_r_jet;
 int BCtype[COMPDIM*2];
 int rescaletype;
 int cooling;
-int DOENERDIAG,DOGDUMPDIAG,DORDUMPDIAG,DODUMPDIAG,DOAVGDIAG, DOIMAGEDIAG,DOAREAMAPDIAG;
+int DOENERDIAG,DOGDUMPDIAG,DORDUMPDIAG,DODUMPDIAG,DOAVGDIAG, DOIMAGEDIAG,DOAREAMAPDIAG,DOAVG2DDIAG;
 int GAMMIEDUMP,GAMMIEIMAGE,GAMMIEENER,DODIAGS,RESTARTMODE,WHICHFILE,POSDEFMETRIC,DOENODEBUGEVERYSUBSTEP,DODIAGEVERYSUBSTEP;
 int INVERTFROMAVERAGEIFFAILED,LIMIT_AC_PRIM_FRAC_CHANGE,LIMIT_AC_FRAC_CHANGE; //atch
 FTYPE MAX_AC_FRAC_CHANGE,MAX_AC_PRIM_FRAC_CHANGE;

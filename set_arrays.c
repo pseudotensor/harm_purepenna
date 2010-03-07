@@ -8,7 +8,7 @@ void set_arrays()
   int ii;
   int jj;
   int floor,pf, tscale,dtstage;
-  int dissloop;
+  int chargesloop,failfloorloop,dissloop;
   FTYPE valueinit;
   int dir,interpi,enodebugi;
   int dimen;
@@ -442,9 +442,20 @@ void set_arrays()
 #endif  
 
 
+#if(DOAVG2D)
+// *2D* time average stuff: only one element in X3
+  vars2dtavg = (FTYPE (*)[N1M][N2M][1]) (&(a_vars2dtavg[0][N1BND][N2BND][0]));
+#endif
 
+#if(DODUMP2D)
+// *2D* time average stuff: only one element in X3
+  vars2ddump = (FTYPE (*)[N1M][N2M][1]) (&(a_vars2ddump[0][N1BND][N2BND][0]));
+#endif
 
-
+#if(DODUMP2DDUFLOOR)
+// *2D* time average stuff: only one element in X3
+  vars2ddufloor = (FTYPE (*)[N1M][N2M][1]) (&(a_vars2ddufloor[0][N1BND][N2BND][0]));
+#endif
   
       
 
@@ -605,6 +616,46 @@ void set_arrays()
     myexit(1);
   }
 #endif
+
+
+  //BOBMARK
+#if(DOFIELDSVSR)
+  for(chargesloop=0;chargesloop<NUMCHARGES;chargesloop++){
+    chargesvsr[chargesloop]=(SFTYPE*)malloc(ncpux1*N1*sizeof(SFTYPE));
+    if(chargesvsr[chargesloop]==NULL){
+      dualfprintf(fail_file,"Couldn't open chargesvsr memory\n");
+      myexit(1);
+    }
+    
+    chargesvsr_tot[chargesloop]=(SFTYPE*)malloc(ncpux1*N1*sizeof(SFTYPE));
+    if(chargesvsr_tot[chargesloop]==NULL){
+      dualfprintf(fail_file,"Couldn't open chargesvsr_tot memory\n");
+      myexit(1);
+    }  
+  }
+#endif
+
+
+
+  //BOBMARK
+#if(DOFAILFLOORVSR)
+  for(failfloorloop=0;failfloorloop<NUMFAILFLOORS;failfloorloop++){
+    failfloorduvsr[failfloorloop]=(SFTYPE*)malloc(ncpux1*N1*sizeof(SFTYPE));
+    if(failfloorduvsr[failfloorloop]==NULL){
+      dualfprintf(fail_file,"Couldn't open failfloorduvsr memory\n");
+      myexit(1);
+    }
+    
+    failfloorduvsr_tot[failfloorloop]=(SFTYPE*)malloc(ncpux1*N1*sizeof(SFTYPE));
+    if(failfloorduvsr_tot[failfloorloop]==NULL){
+      dualfprintf(fail_file,"Couldn't open failfloorduvsr_tot memory\n");
+      myexit(1);
+    }  
+  }
+#endif
+
+
+
   
 #if(DODISSVSR)
   for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++){

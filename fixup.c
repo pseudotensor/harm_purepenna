@@ -190,11 +190,12 @@ int diag_fixup(FTYPE *pr0, FTYPE *pr, struct of_geom *ptrgeom, int finalstep, in
   FTYPE Ui[NPR],Uf[NPR];
   FTYPE ftemp[NPR];
   int failreturn;
-  int pl,enerregion, tscale;
+  int pl,failfloorloop,enerregion, tscale;
   void UtoU(int inputtype, int returntype,struct of_geom *ptrgeom,FTYPE *Uin, FTYPE *Uout);
   int is_within_diagnostic_region,is_within_correctable_region;
   FTYPE deltaUavg[NPR],Uiavg[NPR];
   FTYPE Uprefixup[NPR],Upostfixup[NPR];
+  FTYPE dUincell[NPR];
 
   //  fprintf(stderr,"before diag_fixup %d %d %d\n",ptrgeom->i,ptrgeom->j,whocalled);
 
@@ -215,6 +216,81 @@ int diag_fixup(FTYPE *pr0, FTYPE *pr, struct of_geom *ptrgeom, int finalstep, in
   }
 
   if(finalstep > 0){ // only account if on full timestep
+    
+    /////////////////////////////////////////////////////////////  
+    //
+    // Compute change in conserved quantities due to floor for all later purposes
+    //
+    /////////////////////////////////////////////////////////////
+    
+    // before any changes
+    failreturn=get_state(pr0,ptrgeom,&q);
+    if(failreturn>=1) dualfprintf(fail_file,"get_state(1) failed in fixup.c, why???\n");
+    failreturn=primtoU(UDIAG,pr0,&q,ptrgeom,Ui);
+    if(failreturn>=1) dualfprintf(fail_file,"primtoU(1) failed in fixup.c, why???\n");
+	
+    // after any changes
+    failreturn=get_state(pr,ptrgeom,&q);
+    if(failreturn>=1) dualfprintf(fail_file,"get_state(2) failed in fixup.c, why???\n");
+    failreturn=primtoU(UDIAG,pr,&q,ptrgeom,Uf);
+    if(failreturn>=1) dualfprintf(fail_file,"primtoU(2) failed in fixup.c, why???\n");
+
+    // now unew always defined
+    if(DOENOFLUX != NOENOFLUX) {  //SASMARKx: adjust the conserved quantity to correspond to the adjusted primitive quanitities
+      // notice that geometry comes after subtractions/additions of EOMs
+      UtoU(UDIAG,UEVOLVE,ptrgeom,Ui,Uprefixup);  // convert from UDIAG -> UEVOLVE
+      UtoU(UDIAG,UEVOLVE,ptrgeom,Uf,Upostfixup); // convert from UDIAG -> UEVOLVE
+
+      PALLLOOP(pl) deltaUavg[pl] = Uf[pl]-Ui[pl];
+
+	  //adjust the averaged conserved quantity by the same amt. as the point conserved quantity
+      PALLLOOP(pl) unew[ptrgeom->i][ptrgeom->j][ptrgeom->k][pl] += Upostfixup[pl] - Uprefixup[pl];  
+
+	  // old code: UtoU(UDIAG,UEVOLVE,ptrgeom,Uf,unew[ptrgeom->i][ptrgeom->j][ptrgeom->k]); // convert from UNOTHING->returntype (jon's comment)
+	  // the above line actually converts fixed up U from diagnostic form of U (with gdet) 
+	  // to evolution form of U (maybe withnogdet) and replaces the avg. conserved quantity (ADT)
+    }
+    else if(0){
+	  // this method doesn't work:
+      UtoU(UEVOLVE,UDIAG,ptrgeom,unew[ptrgeom->i][ptrgeom->j][ptrgeom->k],Uiavg); // convert from UNOTHING->returntype
+	  // notice that geometry comes after subtractions/additions of EOMs
+      UtoU(UDIAG,UEVOLVE,ptrgeom,Uf,unew[ptrgeom->i][ptrgeom->j][ptrgeom->k]); // convert from UNOTHING->returntype
+      // 
+      PALLLOOP(pl) deltaUavg[pl] = Uf[pl]-Uiavg[pl];
+    }
+    else{ // original HARM method
+      PALLLOOP(pl) deltaUavg[pl] = Uf[pl]-Ui[pl];
+    }	    
+    
+#if(DODUMP2DDUFLOOR)  //logic borrowed from Jon's newest code
+    /////////////////////////////////////////////////////
+    //
+    // Save the \delta U change into diagnostic array (to later write to a floor diagnostic dump)
+    //
+    //////////////////////////////////////////////////////
+    PALLLOOP(pl){
+	    
+      // dUincell means already (e.g.) (dU0)*(\detg')*(dV') = integral of energy in cell = dUint0 in SM
+      // So compare this to (e.g.) (U0)*(\detg')*(dV') = U0*gdet*dV in SM
+      dUincell[pl]=dVF * deltaUavg[pl];
+    
+      //update *2D* diagnostic array
+      if( pl < NUM2DDUFLOOR ) {  //loop only over existing elements
+        vars2ddufloor[pl][ptrgeom->i][ptrgeom->j][0]+=dUincell[pl];
+      }
+    }
+#endif	
+
+	  //BOBMARK SASMARK: BOB, CREATE A MACRO SO THAT THIS IS DONE ONLY IF DESIRED
+	  for(failfloorloop=0;failfloorloop<NUMFAILFLOORS;failfloorloop++){
+	    ftemp[failfloorloop]=dVF * deltaUavg[failfloorloop];
+	    failfloorduvsr[failfloorloop][startpos[1]+ptrgeom->i] += ftemp[failfloorloop];
+   }  
+    //////////////////////////////////////////////////////
+    //
+    // The rest of diagnostics per each ENERREGION
+    //
+    //////////////////////////////////////////////////////
     ENERREGIONLOOP(enerregion){ // could be designed more efficiently, but not called too often
       enerpos=enerposreg[enerregion];
       fladd=fladdreg[enerregion];
@@ -231,47 +307,6 @@ int diag_fixup(FTYPE *pr0, FTYPE *pr, struct of_geom *ptrgeom, int finalstep, in
 
       // only account if within active zones for that region
       if(is_within_diagnostic_region || is_within_correctable_region){
-	// before any changes
-	failreturn=get_state(pr0,ptrgeom,&q);
-	if(failreturn>=1) dualfprintf(fail_file,"get_state(1) failed in fixup.c, why???\n");
-	failreturn=primtoU(UDIAG,pr0,&q,ptrgeom,Ui);
-	if(failreturn>=1) dualfprintf(fail_file,"primtoU(1) failed in fixup.c, why???\n");
-	
-	// after any changes
-	failreturn=get_state(pr,ptrgeom,&q);
-	if(failreturn>=1) dualfprintf(fail_file,"get_state(2) failed in fixup.c, why???\n");
-	failreturn=primtoU(UDIAG,pr,&q,ptrgeom,Uf);
-	if(failreturn>=1) dualfprintf(fail_file,"primtoU(2) failed in fixup.c, why???\n");
-
-	
-
-	// now unew always defined
-	if(DOENOFLUX != NOENOFLUX) {  //SASMARKx: adjust the conserved quantity to correspond to the adjusted primitive quanitities
-	  // notice that geometry comes after subtractions/additions of EOMs
-	  UtoU(UDIAG,UEVOLVE,ptrgeom,Ui,Uprefixup);  // convert from UDIAG -> UEVOLVE
-	  UtoU(UDIAG,UEVOLVE,ptrgeom,Uf,Upostfixup); // convert from UDIAG -> UEVOLVE
-
-	  PALLLOOP(pl) deltaUavg[pl] = Uf[pl]-Ui[pl];
-
-	  //adjust the averaged conserved quantity by the same amt. as the point conserved quantity
-	  PALLLOOP(pl) unew[ptrgeom->i][ptrgeom->j][ptrgeom->k][pl] += Upostfixup[pl] - Uprefixup[pl];  
-
-	  // old code: UtoU(UDIAG,UEVOLVE,ptrgeom,Uf,unew[ptrgeom->i][ptrgeom->j][ptrgeom->k]); // convert from UNOTHING->returntype (jon's comment)
-	  // the above line actually converts fixed up U from diagnostic form of U (with gdet) 
-	  // to evolution form of U (maybe withnogdet) and replaces the avg. conserved quantity (ADT)
-	}
-	else if(0){
-	  // this method doesn't work:
-	  UtoU(UEVOLVE,UDIAG,ptrgeom,unew[ptrgeom->i][ptrgeom->j][ptrgeom->k],Uiavg); // convert from UNOTHING->returntype
-	  // notice that geometry comes after subtractions/additions of EOMs
-	  UtoU(UDIAG,UEVOLVE,ptrgeom,Uf,unew[ptrgeom->i][ptrgeom->j][ptrgeom->k]); // convert from UNOTHING->returntype
-	  // 
-	  PALLLOOP(pl) deltaUavg[pl] = Uf[pl]-Uiavg[pl];
-	}
-	else{ // original HARM method
-	  PALLLOOP(pl) deltaUavg[pl] = Uf[pl]-Ui[pl];
-	}
-	
 	if(is_within_diagnostic_region){
 	  PALLLOOP(pl){
 	    ftemp[pl]=dVF * deltaUavg[pl];

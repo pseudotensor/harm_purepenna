@@ -26,6 +26,8 @@ int dump_ener(int doener, int dordump, int call_code)
 
   // single region files
   static FILE *debug_file;
+  static FILE *fieldsvsr_file; //BOBMARK
+  static FILE *failfloorvsr_file; //BOBMARK
   static FILE *lumener_file;
   static FILE *dissener_file[NUMDISSVERSIONS];
 
@@ -36,7 +38,7 @@ int dump_ener(int doener, int dordump, int call_code)
 
   char dfnam[MAXFILENAME], ifnam[MAXFILENAME];
   int i, j, k, pl, l, dir,sc,fl,floor,tscale;
-  int dissloop;
+  int chargeloop,failfloorloop,dissloop;
   //  FILE *imagecnt_file, *dumpcnt_file,*avgcnt_file,*debugcnt_file,*lumvsrcnt_file,*dissvsrcnt_file;
 
   // full grid only
@@ -92,6 +94,23 @@ int dump_ener(int doener, int dordump, int call_code)
       sprintf(dfnam,"lumvsr.out");
       myfopen(dfnam,"a+","error opening lumvsr output file\n",&lumener_file);
     }
+
+
+    //BOBMARK
+    if(myid==0) if(DOFIELDSVSR){ 
+      // CPU=0 only
+      sprintf(dfnam,"fieldsvsr.out");
+      myfopen(dfnam,"a+","error opening fieldsvsr output file\n",&fieldsvsr_file);
+    }
+
+    //BOBMARK
+    if(myid==0) if(DOFAILFLOORVSR){ 
+      // CPU=0 only
+      sprintf(dfnam,"failfloorvsr.out");
+      myfopen(dfnam,"a+","error opening failfloorvsr output file\n",&failfloorvsr_file);
+    }
+
+
 
     if(myid==0) if(DODISSVSR){
 	// CPU=0 only
@@ -283,6 +302,20 @@ int dump_ener(int doener, int dordump, int call_code)
 	  //	  }
 	}
 
+	if(DOFIELDSVSR){
+	  for(chargeloop=0;chargeloop<NUMCHARGES;chargeloop++){
+	    if(integrate(ncpux1*N1,&chargesvsr[chargeloop][0],&chargesvsr_tot[chargeloop][0],CUMULATIVETYPE,enerregion)>=1) return(1);
+	  }
+	}
+
+	if(DOFAILFLOORVSR){
+	  for(failfloorloop=0;failfloorloop<NUMFAILFLOORS;failfloorloop++){
+	    if(integrate(ncpux1*N1,&failfloorduvsr[failfloorloop][0],&failfloorduvsr_tot[failfloorloop][0],CUMULATIVETYPE,enerregion)>=1) return(1);
+	  }
+	}
+
+
+
 	if(DODISSVSR){
 	  for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++){// this loop is over pointers, not a continuous memory space!
 	    // for(ii=0;ii<ncpux1*N1;ii++)
@@ -398,6 +431,27 @@ int dump_ener(int doener, int dordump, int call_code)
 	  myfprintf(lumener_file,"%21.15g %ld ",t,realnstep);
 	  for(ii=0;ii<ncpux1*N1;ii++) myfprintf(lumener_file, "%21.15g ", lumvsr_tot[ii]);
 	}
+
+//BOBMARK
+	if(DOFIELDSVSR){ 
+	  // integrated fields vs radius
+	  for(chargeloop=0;chargeloop<NUMCHARGES;chargeloop++){
+	    myfprintf(fieldsvsr_file,"%21.15g %ld %ld ",t,realnstep,chargeloop);
+	    for(ii=0;ii<ncpux1*N1;ii++) myfprintf(fieldsvsr_file, "%21.15g ", chargesvsr_tot[chargeloop][ii]);
+	    myfprintf(fieldsvsr_file,"\n");	    
+	  }
+	}
+
+	if(DOFAILFLOORVSR){ 
+	  // integrated contributions from fails and floors vs radius
+	  for(failfloorloop=0;failfloorloop<NUMFAILFLOORS;failfloorloop++){
+	    myfprintf(failfloorvsr_file,"%21.15g %ld %ld ",t,realnstep,failfloorloop);
+	    for(ii=0;ii<ncpux1*N1;ii++) myfprintf(failfloorvsr_file, "%21.15g ", failfloorduvsr_tot[failfloorloop][ii]);
+	    myfprintf(failfloorvsr_file,"\n");	    
+	  }
+	}
+
+
 
 	if(DODISSVSR){
 	  for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++){
@@ -529,6 +583,8 @@ int dump_ener(int doener, int dordump, int call_code)
       myfprintf(gener_file,"\n");
       if(enerregion==GLOBALENERREGION){
 	if(DOLUMVSR) myfprintf(lumener_file,"\n");
+	if(DOFIELDSVSR) myfprintf(fieldsvsr_file,"\n");  //BOBMARK
+	if(DOFAILFLOORVSR) myfprintf(failfloorvsr_file,"\n");  //BOBMARK
 	if(DODISSVSR) 	  for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++) myfprintf(dissener_file[dissloop],"\n");
 	if(DODEBUG) myfprintf(debug_file,"\n");
       }
@@ -563,6 +619,8 @@ int dump_ener(int doener, int dordump, int call_code)
 
       if(enerregion==GLOBALENERREGION){
 	if(DOLUMVSR) myfclose(&lumener_file,"Couldn't close lumener_file\n");
+	if(DOFIELDSVSR) myfclose(&fieldsvsr_file,"Couldn't close fieldsvsr_file\n"); //BOBMARK
+	if(DOFAILFLOORVSR) myfclose(&failfloorvsr_file,"Couldn't close failfloorvsr_file\n"); //BOBMARK
 	if(DODISSVSR) 	  for(dissloop=0;dissloop<NUMDISSVERSIONS;dissloop++) myfclose(&dissener_file[dissloop],"Couldn't close dissener_file\n");
 	if(DODEBUG) myfclose(&debug_file,"Couldn't close debug_file\n");
 	fclose(probe_file);

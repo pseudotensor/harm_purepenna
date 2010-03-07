@@ -477,6 +477,144 @@ int avgdump(long dump_cnt)
 
 }
 
+int avg2ddump(long dump_cnt, char *fileprefix, FTYPE (*vars)[N1M][N2M][1], int numcols)
+{
+  FILE *outfp;
+  int whichdump;
+  char filesuffix[MAXFILENAME];
+  char fileformat[MAXFILENAME];
+  char localfileformat[MAXFILENAME];
+  char truemyidtxt[MAXFILENAME];
+  char dfnam[MAXFILENAME];
+  int i, j, k;
+  const int numcolslineheader = 7; //i, j, x1, x2, r, th, gdet
+  const int numcolsfileheader = 17;
+  int res;
+
+
+  trifprintf("begin dumping %s# %ld ... ",fileprefix,dump_cnt);
+  
+  //strcpy(fileprefix,"dumps/avg2d"); //set externally
+  strcpy(fileformat,"%04ld");
+  strcpy(filesuffix,"");
+  //ADD ON MPI id (myid) SUFFIX to file name
+  sprintf(truemyidtxt,".%04d",myid);
+  
+  // setup filename
+  if(dump_cnt>=0){
+    strcpy(localfileformat,"%s");
+    strcat(localfileformat,fileformat);
+    strcat(localfileformat,"%s");
+    strcat(localfileformat,"%s");
+    sprintf(dfnam, localfileformat, fileprefix, dump_cnt, filesuffix, truemyidtxt);
+  }
+  else{ // then no file number wanted (i.e. for gdump())
+    sprintf(dfnam, "%s%s%s", fileprefix, filesuffix, truemyidtxt);
+  }
+  
+  //open file; independently for each MPI id
+  if ( NULL == (outfp = fopen(dfnam, "wb")) ) {
+    dualfprintf(fail_file, "error opening %s %s (fullname=%s) file\n",fileprefix,filesuffix,dfnam);
+    dualfprintf(fail_file, "Check if disk full or have correct permissions\n");
+    myexit(249);
+  }
+    
+  //write header
+  res = fprintf( outfp, "%4d %4d %4d %21.15g %21.15g %21.15g %4d %4d %4d %4d %4d %4d %4d %4d %4d %21.15g %ld\n", 
+           numcolsfileheader, numcolslineheader, numcols,
+            t, global_tavgf_2d, global_tavgi_2d, 
+            mycpupos[1], mycpupos[2], mycpupos[3], 
+            ncpux1, ncpux2, ncpux3,
+            (int)N1, (int)N2, (int)N3, a, realnstep );
+  
+  k = 0; //2d dumps, so have to set k to zero
+  for( j = 0; j < N2 && res > 0; j++ ) {
+    for(i = 0; i < N1 && res > 0; i++ ){ 
+      //write out content per cell 
+      res = avg2d_content( i, j, k, outfp, vars, numcols );
+    }
+  } 
+ 
+  if( res < 0 ) {
+    dualfprintf( fail_file, "myid=%d: could not write to file %s\n", myid, dfnam );
+    fclose( outfp );
+    myexit(1);
+  }
+  
+  trifprintf("end dumping %d# %ld ... ",fileprefix,dump_cnt);
+
+  fclose( outfp );
+
+  return(0);
+
+}
+
+//returns negative value on error
+int avg2d_content(int i, int j, int k, FILE *outfp, FTYPE (*vars)[N1M][N2M][1], int numcols)
+{
+  int pl = 0, l = 0, col = 0;
+  struct of_geom geom;
+  FTYPE X[NDIM],V[NDIM];
+  FTYPE ftemp;
+  char fmt[] = "%21.15g ";
+  int res;
+
+  if( k != 0 ) {
+    dualfprintf( fail_file, "avg2d_content: k = %d but should always be zero\n", k );
+    myexit(111);
+  }
+
+  coord(i, j, k, CENT, X);
+  bl_coord(X, V);
+  get_geometry(i, j, k, CENT, &geom);
+  
+  ///////////////////////////////////
+  //
+  //  LINE HEADER
+  //
+  ///////////////////////////////////
+  
+  //absolute i, j
+  res = fprintf( outfp, fmt, (FTYPE)(i+startpos[1]) );
+  if( res > 0 ) {
+    res = fprintf( outfp, fmt, (FTYPE)(j+startpos[2]) );
+  }
+  
+  //x1, x2
+  for( l = 1; l < 3 && res > 0; l++ ) {
+    res = fprintf( outfp, fmt, X[l] );
+  }
+  
+  //r, th
+  for( l = 1; l < 3 && res > 0; l++ ) {
+    res = fprintf( outfp, fmt, V[l]);
+  }
+
+  if( res > 0 ) {
+    //sqrt(-g)
+    res = fprintf( outfp, fmt, geom.g );
+  }
+
+  ///////////////////////////////////
+  //
+  //  DUMP CONTENT
+  //
+  ///////////////////////////////////
+  
+  //assume all array elements set
+  for( col = 0; col < numcols && res > 0; col++ ) {
+    res = fprintf( outfp, fmt, vars[col][i][j][0] );
+  }
+  
+  if( res > 0 ) {
+    //finish off line
+    res = fprintf( outfp, "\n" );
+  }
+  
+  return( res );
+
+}
+
 int avg_content(int i, int j, int k, MPI_Datatype datatype,void *writebuf)
 {
   int pl = 0, l = 0, col = 0;

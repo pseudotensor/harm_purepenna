@@ -322,6 +322,7 @@
 
 // see diag_source()
 #define DOLUMVSR 0
+#define DOFIELDSVSR 0
 
 // see diag_source()
 #define DODISSVSR 0
