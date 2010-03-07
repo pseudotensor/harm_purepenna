@@ -395,6 +395,10 @@
 
 // was 29 =>
 #define NUMNORMDUMP (NPR+1+4*4+6) // number of "normal" dump variables
+#define NUM2DAVGDUMP (107) //will add more later
+#define NUM2DDUMP (NUM2DAVGDUMP) //will add more later
+#define NUM2DDUFLOOR (NPR-3) //all conserved quantities without fields [RHO, E, P1, P2, P3 (no B1, B2, B3)]
+#define VARS2DLUMVSR (0) //zeroth element is LUMVSR in the average dump
 // for above see diag.c and set_varstavg()
 #define NUMFARADAY 6
 #define NUMOTHER 1

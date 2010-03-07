@@ -172,6 +172,8 @@ int coolfunc_rebecca_thindisk(FTYPE h_over_r, FTYPE *pr, struct of_geom *geom, s
       	rpho=2.0*(1.0+cos(2.0/3.0*(acos(-a))));
 
 	//	trifprintf("rphoton=%lf\n", rpho);
+#if(0)
+ //original Rebecca's way: no cooling inside the photon orbit
 	if(r>rpho){
 	  photoncapture=1.0 ;
 	  //  trifprintf("r=%lf, photoncapture=%lf, rph=%lf \ n", r, photoncapture, rpho); 
@@ -179,6 +181,10 @@ int coolfunc_rebecca_thindisk(FTYPE h_over_r, FTYPE *pr, struct of_geom *geom, s
 	else{
 	  photoncapture=0.0 ;
 	}
+#elif(1)
+ //new way: cool all the way to horizon
+	photoncapture=1.0;
+#endif
 
 
         R = r*sin(th) ;

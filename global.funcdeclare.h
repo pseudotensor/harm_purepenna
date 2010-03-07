@@ -40,6 +40,14 @@ extern int fluxcalc(int stage, FTYPE pr[][N2M][N3M][NPR],
 		    );
 extern void diag_source_comp(struct of_geom *ptrgeom, FTYPE (*dUcomp)[NPR],SFTYPE Dt);
 extern void diag_source_all(struct of_geom *ptrgeom, FTYPE *dU,SFTYPE Dt);
+
+
+//BOBMARK... computing things for fieldsvsr.out
+//extern void diag_chargesvsr(struct of_geom *ptrgeom, FTYPE *pr, struct of_state *q, SFTYPE Dt);
+extern void diag_chargesvsr(FTYPE *pa,struct of_geom *ptrgeom, struct of_state *q, SFTYPE Dt);
+
+
+
 extern int diag_flux(FTYPE prim[][N2M][N3M][NPR], FTYPE F1[][N2M][N3M][NPR], FTYPE F2[][N2M][N3M][NPR],FTYPE F3[][N2M][N3M][NPR],SFTYPE Dt);
 extern int compute_new_metric_substep(FTYPE pb[][N2M][N3M][NPR],FTYPE *CUf, FTYPE *Cunew);  
 extern int diss_compute(int evolvetype, int inputtype, FTYPE *U, struct of_geom *ptrgeom, FTYPE *prbefore, FTYPE *pr);
@@ -111,6 +119,9 @@ extern int avg_content(int i, int j, int k, MPI_Datatype datatype,void *writebuf
 
 extern int avgdump2(long avg_cnt);
 extern int avg2_content(int i, int j, int k, MPI_Datatype datatype,void *writebuf);
+
+extern int avg2ddump(long dump_cnt, char *fileprefix, FTYPE (*vars)[N1M][N2M][1], int numcols);
+extern int avg2d_content(int i, int j, int k, FILE *outfp, FTYPE (*vars)[N1M][N2M][1], int numcols);
 
 extern int debugdump(long debug_cnt);
 extern int debug_content(int i, int j, int k, MPI_Datatype datatype,void *writebuf);
@@ -604,6 +615,14 @@ extern void current_precalc(int which, struct of_geom *geom, struct of_state *q,
 extern void init_varstavg(void);
 extern void final_varstavg(FTYPE IDT);
 extern int set_varstavg(FTYPE tfrac);
+//////////////////////////////
+//
+// 2D averages calculation
+extern void init_vars2dtavg(void);
+extern void final_vars2dtavg(FTYPE IDT);
+extern int set_vars2dtavg(FTYPE tfrac, int is_final_call_before_dump);
+//
+//////////////////////////////
 extern void current_calc(FTYPE cfaraday[][N2M][N3M][NUMCURRENTSLOTS][3]);
 extern int current_doprecalc(int which, FTYPE p[][N2M][N3M][NPR]);
 extern int average_calc(int doavg);

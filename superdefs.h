@@ -322,6 +322,23 @@ FTYPE a_atudtavg[N1M][N2M][N3M][NUMSTRESSTERMS];
 #endif
 
 
+#if(DOAVG2D)
+// *2D* time average stuff: only one element in X3
+FTYPE a_vars2dtavg[NUM2DAVGDUMP][N1M][N2M][1];
+#endif
+
+
+#if(DODUMP2D)
+// *2D* time average stuff: only one element in X3
+FTYPE a_vars2ddump[NUM2DDUMP][N1M][N2M][1];
+#endif
+
+#if(DODUMP2DDUFLOOR)
+// *2D* time average stuff: only one element in X3
+FTYPE a_vars2ddufloor[NUM2DDUFLOOR][N1M][N2M][1];
+#endif
+
+
 
 ///////////////////////////////
 //

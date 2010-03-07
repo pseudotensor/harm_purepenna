@@ -513,6 +513,27 @@ int init_vpot(FTYPE p[][N2M][N3M][NPR])
 
 
 
+ //  //BOBMARK... hack so that bound_prim is applied to A, before the B^i's are set.
+ //  old way was creating monopoles.
+
+#if(1)
+ COMPFULLLOOP{
+   DIMENLOOP(dir){
+     p[i][j][k][B1-1+dir]=A[dir][i][j][k];
+   }
+ }
+ 
+ if (bound_prim(STAGEM1,0.0,p) >= 1)
+   FAILSTATEMENT("fluxvpot.c:init_vpot()", "bound_prim()", 1);
+ 
+
+ COMPFULLLOOP{
+   DIMENLOOP(dir){
+      A[dir][i][j][k]=p[i][j][k][B1-1+dir];
+      p[i][j][k][B1-1+dir]=0.;
+   }
+ }
+#endif
 
   // assigns value to p and pstagscratch and unew (uses F1/F2/F3 if doing FLUXCTHLL)
   // often user just uses init_vpot2field() unless not always using vector potential

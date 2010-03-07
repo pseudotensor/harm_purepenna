@@ -380,9 +380,11 @@ int advance_standard(int stage,
 #if(ACCURATEDIAG)
 	  diag_source_comp(&geom,dUcomp,fluxdt);
 	  diag_source_all(&geom,dUgeom,fluxdt);
+	  diag_chargesvsr(pb[i][j][k],&geom,&q,fluxdt); //BOBMARK
 #else
 	  diag_source_comp(&geom,dUcomp,dt4diag);
 	  diag_source_all(&geom,dUgeom,dt4diag);
+	  diag_chargesvsr(pb[i][j][k],&geom,&q,fluxdt); //BOBMARK
 #endif
 	}
 
@@ -960,8 +962,10 @@ int advance_finitevolume(int stage,
 #if(ACCURATEDIAG)
 	  // do diagnostics for volume integrated source term
 	  diag_source_all(&geom,dUgeom,fluxdt);
+	  diag_chargesvsr(pb[i][j][k],&geom,&q,fluxdt); //BOBMARK
 #else
 	  diag_source_all(&geom,dUgeom,dt4diag);
+	  diag_chargesvsr(pb[i][j][k],&geom,&q,fluxdt); //BOBMARK
 #endif
 	}	  
 		  

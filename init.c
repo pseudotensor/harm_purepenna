@@ -265,9 +265,9 @@ int init_global(void)
   UUMIN =1.e-6;
   RHOMINLIMIT=1.e-16;
   UUMINLIMIT =1.e-16;
-  BSQORHOLIMIT=1E1;
-  BSQOULIMIT=1E1;
-  UORHOLIMIT=1E1;
+  BSQORHOLIMIT=1E4;
+  BSQOULIMIT=1E4;
+  UORHOLIMIT=1E4;
 
 
 #elif(WHICHPROBLEM==GRBJET)
@@ -304,20 +304,20 @@ int init_global(void)
   /* output choices */
   tf = 20000.0;
 
-  DTdumpgen[DTFLUX]=DTdumpgen[DTOTHER]=DTdumpgen[DTEOS]=DTdumpgen[DTVPOT]=DTdumpgen[DTDUMP] = 50.;			/* dumping frequency, in units of M */
+  DTdumpgen[DTFLUX]=DTdumpgen[DTOTHER]=DTdumpgen[DTEOS]=DTdumpgen[DTVPOT]=DTdumpgen[DTDUMP] = 100.;			/* dumping frequency, in units of M */
   DTdumpgen[DTDISS]=DTdumpgen[DTDUMP]/5.0;
-  DTdumpgen[DTAVG] = 50.0;
-  DTdumpgen[DTFIELDLINE]=DTdumpgen[DTENER] = 2.0;			/* logfile frequency, in units of M */
-  DTdumpgen[DTIMAGE] = 2.0;			/* image file frequ., in units of M */
+  DTdumpgen[DTAVG] = 100.0;                                /* 2d dumps dumping freq. */
+  DTdumpgen[DTFIELDLINE]=DTdumpgen[DTENER] = 4.0;			/* logfile frequency, in units of M */
+  DTdumpgen[DTIMAGE] = 4.0;			/* image file frequ., in units of M */
   DTdumpgen[DTDEBUG] = 1000.0; /* debug file */
   // DTr = .1 ; /* restart file frequ., in units of M */
-  DTr = 100;			/* restart file period in steps */
+  DTr = 20000;			/* restart file period in steps */
 #elif(WHICHPROBLEM==GRBJET)
   /* output choices */
   tf = 5E5;
   
   DTd = 250.;                 /* dumping frequency, in units of M */
-  DTavg = 250.0;
+  DTavg = 250.0;              
   DTener = 2.0;                       /* logfile frequency, in units of M */
   DTi = 10.0;                 /* image file frequ., in units of M */
   DTdebug = 250.0; /* debug file */
@@ -894,7 +894,9 @@ int init_vpot_user(int *whichcoord, int l, int i, int j, int k, FTYPE pr[][N2M][
       if(q > 0.){
 
         //    *A+ = q*sin(log(r/STARTFIELD)/fieldhor)* (1. + 0.1 * (ranc(0) - 0.5));
-        *A+=q*q*sin(log(r/STARTFIELD)/fieldhor)* (1. + 0.02 * (ranc(0) - 0.5))  ;
+
+
+	*A+=q*q*sin(log(r/STARTFIELD)/fieldhor)* (1. + 0.02 * (ranc(0) - 0.5))  ;
 
         //  *A+=q;
       }

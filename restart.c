@@ -556,6 +556,14 @@ int readwrite_restart_header(int readwrite, int bintxt, int bcasthead, FILE*head
   header1_gen(readwrite,bintxt,bcasthead,&rdump_cnt, sizeof(long), "%ld", 1, MPI_LONG, headerptr);
   header1_gen(readwrite,bintxt,bcasthead,&dumpcntgen[0], sizeof(long), "%ld", NUMDTDS, MPI_LONG, headerptr);
   
+  //BOBMARK
+
+  DTdumpgen[0] = 100;
+  DTdumpgen[1] = 50;
+  DTdumpgen[2] = 100;
+
+
+
   //    header1_gen(readwrite,bintxt,bcasthead,&DTd, sizeof(SFTYPE), sheaderone, 1, MPI_SFTYPE, headerptr);
   //header1_gen(readwrite,bintxt,bcasthead,&DTavg, sizeof(SFTYPE), sheaderone, 1, MPI_SFTYPE, headerptr);
   //header1_gen(readwrite,bintxt,bcasthead,&DTener, sizeof(SFTYPE), sheaderone, 1, MPI_SFTYPE, headerptr);

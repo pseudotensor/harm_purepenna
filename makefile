@@ -43,8 +43,9 @@ endif
 
 #####################
 # WATCH OUT FOR SPACES, etc. AFTER ASSIGNMENTS!!!!
-USEBG=1
-USEICC=0
+USEBG=0
+USEUB=0
+USEICC=1
 USEGCC=0
 USECCC=0
 USEORANGE=0
@@ -57,7 +58,7 @@ USEMCCSWITCH=0
 AVOIDFORK=0
 USESPECIAL4GENERATE=0
 CCGENERATE=gcc
-
+ECHOSWITCH=-e
 
 ifeq ($(USEMPI),1)
 
@@ -113,9 +114,22 @@ ifeq ($(USEPGCC),1)
 MCC=mpicc
 endif    
 
+ifeq ($(USEUB),1)
+MCC=/usr/bin/mpicc.mpich
+USEGCC=1
+ECHOSWITCH=
+USELAPACK=0
+endif
+
 endif    
 
 
+
+ifeq ($(USEUB),1)
+USEGCC=1
+ECHOSWITCH=
+USELAPACK=0
+endif
 
 
 # default extra flags to pass to compiler
@@ -151,6 +165,8 @@ COMP=gcc $(DFLAGS)
 
 CFLAGSPRE = -Wall -O3 $(DFLAGS)
 CFLAGSPRENONPRECISE=-O3 $(DFLAGS)
+GCCCFLAGSPRE= -Wall -O2 $(DFLAGS)
+GCCCFLAGS= -Wall -O2 $(DFLAGS)
 
 #
 #CFLAGS = -Wall -mpentium -O3 -pipe  -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686 -DNEED_GETOPT -DLINUX -ffast-math -pg
